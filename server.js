@@ -35,7 +35,8 @@ app.get('/reels-latest', async (req, res) => {
         const data = await dynamoDB.scan(params).promise();
         const reels = data.Items.map(item => ({
             media_url: `${CLOUDFRONT_URL}/${item.s3_key}`,
-            stock_identifier: item.stock_identifier
+            stock_identifier: item.stock_identifier,
+            caption: item.caption
         }));
         res.json(reels);
     } catch (error) {
