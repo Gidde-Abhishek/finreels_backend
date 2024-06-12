@@ -76,6 +76,8 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
                 reel_id,
                 s3_key: fileName,
                 caption,
+                likes:0,
+                likedBy:[],
                 timestamp: Date.now()
             }
         };
