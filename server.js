@@ -38,7 +38,7 @@ app.get('/reels-latest', async (req, res) => {
             stock_identifier: item.stock_identifier,
             caption: item.caption,
             likes: item.likes || 0,
-            liked_by: item.liked_by || []
+            likedBy: item.likedBy || []
         }));
         res.json(reels);
     } catch (error) {
@@ -117,17 +117,17 @@ app.post('/like-reel', async (req, res) => {
             return res.status(404).json({ error: 'Reel not found' });
         }
 
-        // Update the number of likes and liked_by list
+        // Update the number of likes and likedBy list
         const likes = reel.likes ? reel.likes + 1 : 1;
-        const likedBy = reel.liked_by ? [...reel.liked_by, client_id] : [client_id];
+        const likedBy = reel.likedBy ? [...reel.likedBy, client_id] : [client_id];
 
         const updateParams = {
             TableName: TABLE_NAME,
             Key: { reel_id },
-            UpdateExpression: 'set likes = :likes, liked_by = :liked_by',
+            UpdateExpression: 'set likes = :likes, likedBy = :likedBy',
             ExpressionAttributeValues: {
                 ':likes': likes,
-                ':liked_by': likedBy
+                ':likedBy': likedBy
             },
             ReturnValues: 'UPDATED_NEW'
         };
