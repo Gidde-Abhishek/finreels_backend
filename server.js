@@ -26,26 +26,26 @@ const TABLE_NAME = 'finreels';
 // Fetch latest reels
 app.get('/reels-latest', async (req, res) => {
     const params = {
-        TableName: TABLE_NAME,
-        ScanIndexForward: false // Sort in descending order
+        TableName: TABLE_NAME
     };
 
     try {
         const data = await dynamoDB.scan(params).promise();
-        const reels = data.Items.map(item => ({
-            reel_id: item.reel_id, // Include reel_id in the response
-            media_url: `${CLOUDFRONT_URL}/${item.s3_key}`,
-            stock_identifier: item.stock_identifier,
-            caption: item.caption,
-            likes: item.likes || 0,
-            likedBy: item.likedBy || []
-        }));
+        const reels = data.Items
+            .sort((a, b) => b.timestamp - a.timestamp) // Sort by timestamp in descending order
+            .map(item => ({
+                reel_id: item.reel_id,
+                media_url: `${CLOUDFRONT_URL}/${item.s3_key}`,
+                stock_identifier: item.stock_identifier,
+                caption: item.caption,
+                likes: item.likes || 0,
+                likedBy: item.likedBy || []
+            }));
         res.json(reels);
     } catch (error) {
         res.status(500).json({ error: `Failed to fetch latest reels: ${error.message}` });
     }
 });
-
 
 // Feature a reel by uploading video
 app.post('/feature-reel', upload.single('file'), async (req, res) => {
@@ -76,8 +76,8 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
                 reel_id,
                 s3_key: fileName,
                 caption,
-                likes:0,
-                likedBy:[],
+                likes: 0,
+                likedBy: [],
                 timestamp: Date.now()
             }
         };
@@ -97,15 +97,15 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
 
 // Like a reel
 app.post('/like-reel', async (req, res) => {
-    const { reel_id, client_id } = req.body;
+    const { stock_identifier, reel_id, client_id } = req.body;
 
-    if (!reel_id || !client_id) {
-        return res.status(400).json({ error: 'Reel ID and Client ID are required' });
+    if (!stock_identifier || !reel_id || !client_id) {
+        return res.status(400).json({ error: 'Stock Identifier, Reel ID, and Client ID are required' });
     }
 
     const getParams = {
         TableName: TABLE_NAME,
-        Key: { reel_id }
+        Key: { stock_identifier, reel_id }
     };
 
     try {
@@ -123,7 +123,7 @@ app.post('/like-reel', async (req, res) => {
 
         const updateParams = {
             TableName: TABLE_NAME,
-            Key: { reel_id },
+            Key: { stock_identifier, reel_id },
             UpdateExpression: 'set likes = :likes, likedBy = :likedBy',
             ExpressionAttributeValues: {
                 ':likes': likes,
@@ -140,9 +140,7 @@ app.post('/like-reel', async (req, res) => {
     }
 });
 
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
-    
