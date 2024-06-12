@@ -27,22 +27,25 @@ const TABLE_NAME = 'finreels';
 app.get('/reels-latest', async (req, res) => {
     const params = {
         TableName: TABLE_NAME,
-        Limit: 4, // Fetch the latest 4 items
         ScanIndexForward: false // Sort in descending order
     };
 
     try {
         const data = await dynamoDB.scan(params).promise();
         const reels = data.Items.map(item => ({
+            reel_id: item.reel_id, // Include reel_id in the response
             media_url: `${CLOUDFRONT_URL}/${item.s3_key}`,
             stock_identifier: item.stock_identifier,
-            caption: item.caption
+            caption: item.caption,
+            likes: item.likes || 0,
+            liked_by: item.liked_by || []
         }));
         res.json(reels);
     } catch (error) {
         res.status(500).json({ error: `Failed to fetch latest reels: ${error.message}` });
     }
 });
+
 
 // Feature a reel by uploading video
 app.post('/feature-reel', upload.single('file'), async (req, res) => {
@@ -89,6 +92,52 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
         res.status(500).json({ error: `Failed to feature reel: ${error.message}` });
     }
 });
+
+// Like a reel
+app.post('/like-reel', async (req, res) => {
+    const { reel_id, client_id } = req.body;
+
+    if (!reel_id || !client_id) {
+        return res.status(400).json({ error: 'Reel ID and Client ID are required' });
+    }
+
+    const getParams = {
+        TableName: TABLE_NAME,
+        Key: { reel_id }
+    };
+
+    try {
+        // Fetch the current reel data
+        const data = await dynamoDB.get(getParams).promise();
+        const reel = data.Item;
+
+        if (!reel) {
+            return res.status(404).json({ error: 'Reel not found' });
+        }
+
+        // Update the number of likes and liked_by list
+        const likes = reel.likes ? reel.likes + 1 : 1;
+        const likedBy = reel.liked_by ? [...reel.liked_by, client_id] : [client_id];
+
+        const updateParams = {
+            TableName: TABLE_NAME,
+            Key: { reel_id },
+            UpdateExpression: 'set likes = :likes, liked_by = :liked_by',
+            ExpressionAttributeValues: {
+                ':likes': likes,
+                ':liked_by': likedBy
+            },
+            ReturnValues: 'UPDATED_NEW'
+        };
+
+        const result = await dynamoDB.update(updateParams).promise();
+
+        res.json({ message: 'Reel liked successfully', updatedReel: result.Attributes });
+    } catch (error) {
+        res.status(500).json({ error: `Failed to like reel: ${error.message}` });
+    }
+});
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
