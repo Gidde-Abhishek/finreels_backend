@@ -52,6 +52,111 @@ app.get('/reels-latest', async (req, res) => {
 });
 
 // Feature a reel by uploading video
+// app.post('/feature-reel', upload.single('file'), async (req, res) => {
+//     const { caption, stock_identifier } = req.body;
+//     const file = req.file;
+
+//     if (!file) {
+//         return res.status(400).json({ error: 'Video file is required' });
+//     }
+
+//     const reel_id = uuidv4();
+//     const fileName = `reels/${stock_identifier}_${reel_id}.mp4`;
+
+//     try {
+//         const uploadParams = {
+//             Bucket: S3_BUCKET,
+//             Key: fileName,
+//             Body: file.buffer,
+//             ContentType: file.mimetype
+//         };
+
+//         await s3.upload(uploadParams).promise();
+
+//         // Create MediaConvert job
+//         const jobParams = {
+//             Role: MEDIACONVERT_ROLE,
+//             Settings: {
+//                 Inputs: [{
+//                     FileInput: `s3://${S3_BUCKET}/${fileName}`,
+//                     VideoSelector: {
+//                         ColorSpace: 'FOLLOW'
+//                     },
+//                     AudioSelectors: {
+//                         'Audio Selector 1': {
+//                             DefaultSelection: 'DEFAULT'
+//                         }
+//                     }
+//                 }],
+//                 OutputGroups: [{
+//                     Name: 'Apple HLS',
+//                     OutputGroupSettings: {
+//                         Type: 'HLS_GROUP_SETTINGS',
+//                         HlsGroupSettings: {
+//                             SegmentLength: 10,
+//                             Destination: `s3://${MEDIACONVERT_OUTPUT_BUCKET}/reels/${stock_identifier}_${reel_id}/`
+//                         }
+//                     },
+//                     Outputs: [{
+//                         VideoDescription: {
+//                             CodecSettings: {
+//                                 Codec: 'H_264',
+//                                 H264Settings: {
+//                                     RateControlMode: 'QVBR',
+//                                     SceneChangeDetect: 'TRANSITION_DETECTION',
+//                                     QualityTuningLevel: 'SINGLE_PASS'
+//                                 }
+//                             }
+//                         },
+//                         AudioDescriptions: [{
+//                             CodecSettings: {
+//                                 Codec: 'AAC',
+//                                 AacSettings: {
+//                                     Bitrate: 96000,
+//                                     CodingMode: 'CODING_MODE_2_0',
+//                                     SampleRate: 48000
+//                                 }
+//                             }
+//                         }],
+//                         ContainerSettings: {
+//                             Container: 'M3U8',
+//                             M3u8Settings: {}
+//                         }
+//                     }]
+//                 }]
+//             }
+//         };
+
+//         const job = await mediaConvert.createJob(jobParams).promise();
+
+//         const dbParams = {
+//             TableName: TABLE_NAME,
+//             Item: {
+//                 stock_identifier,
+//                 reel_id,
+//                 s3_key: fileName,
+//                 caption,
+//                 likes: 0,
+//                 likedBy: [],
+//                 timestamp: Date.now(),
+//                 jobId: job.Job.Id
+//             }
+//         };
+
+//         await dynamoDB.put(dbParams).promise();
+
+//         const reelData = {
+//             message: 'Reel featured successfully',
+//             media_url: `${CLOUDFRONT_URL}/reels/${stock_identifier}_${reel_id}/index.m3u8`
+//         };
+
+//         res.json(reelData);
+//     } catch (error) {
+//         res.status(500).json({ error: `Failed to feature reel: ${error.message}` });
+//     }
+// });
+
+// Feature a reel by uploading video and converting it to HLS
 app.post('/feature-reel', upload.single('file'), async (req, res) => {
     const { caption, stock_identifier } = req.body;
     const file = req.file;
@@ -64,6 +169,7 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
     const fileName = `reels/${stock_identifier}_${reel_id}.mp4`;
 
     try {
+        // Upload the original MP4 file to S3
         const uploadParams = {
             Bucket: S3_BUCKET,
             Key: fileName,
@@ -73,62 +179,62 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
 
         await s3.upload(uploadParams).promise();
 
-        // Create MediaConvert job
-        const jobParams = {
-            Role: MEDIACONVERT_ROLE,
+        // Create MediaConvert job settings
+        const mediaConvertParams = {
+            Role: process.env.MEDIACONVERT_ROLE,
             Settings: {
-                Inputs: [{
-                    FileInput: `s3://${S3_BUCKET}/${fileName}`,
-                    VideoSelector: {
-                        ColorSpace: 'FOLLOW'
-                    },
-                    AudioSelectors: {
-                        'Audio Selector 1': {
-                            DefaultSelection: 'DEFAULT'
-                        }
-                    }
-                }],
-                OutputGroups: [{
-                    Name: 'Apple HLS',
-                    OutputGroupSettings: {
-                        Type: 'HLS_GROUP_SETTINGS',
-                        HlsGroupSettings: {
-                            SegmentLength: 10,
-                            Destination: `s3://${MEDIACONVERT_OUTPUT_BUCKET}/reels/${stock_identifier}_${reel_id}/`
-                        }
-                    },
-                    Outputs: [{
-                        VideoDescription: {
-                            CodecSettings: {
-                                Codec: 'H_264',
-                                H264Settings: {
-                                    RateControlMode: 'QVBR',
-                                    SceneChangeDetect: 'TRANSITION_DETECTION',
-                                    QualityTuningLevel: 'SINGLE_PASS'
-                                }
+                OutputGroups: [
+                    {
+                        Name: "File Group",
+                        OutputGroupSettings: {
+                            Type: "HLS_GROUP_SETTINGS",
+                            HlsGroupSettings: {
+                                Destination: `s3://${process.env.MEDIACONVERT_OUTPUT_BUCKET}/`,
+                                SegmentLength: 10,
+                                MinSegmentLength: 0, // Add the minSegmentLength property
                             }
                         },
-                        AudioDescriptions: [{
-                            CodecSettings: {
-                                Codec: 'AAC',
-                                AacSettings: {
-                                    Bitrate: 96000,
-                                    CodingMode: 'CODING_MODE_2_0',
-                                    SampleRate: 48000
-                                }
+                        Outputs: [
+                            {
+                                ContainerSettings: {
+                                    Container: "M3U8"
+                                },
+                                VideoDescription: {
+                                    CodecSettings: {
+                                        Codec: "H_264",
+                                        H264Settings: {
+                                            MaxBitrate: 5000000,
+                                            RateControlMode: "QVBR"
+                                        }
+                                    }
+                                },
+                                AudioDescriptions: [
+                                    {
+                                        CodecSettings: {
+                                            Codec: "AAC",
+                                            AacSettings: {
+                                                Bitrate: 96000,
+                                                CodingMode: "CODING_MODE_2_0",
+                                                SampleRate: 48000
+                                            }
+                                        }
+                                    }
+                                ]
                             }
-                        }],
-                        ContainerSettings: {
-                            Container: 'M3U8',
-                            M3u8Settings: {}
-                        }
-                    }]
-                }]
+                        ]
+                    }
+                ],
+                Inputs: [
+                    {
+                        FileInput: `s3://${S3_BUCKET}/${fileName}`
+                    }
+                ]
             }
         };
 
-        const job = await mediaConvert.createJob(jobParams).promise();
+        const mediaConvertResponse = await mediaConvert.createJob(mediaConvertParams).promise();
 
+        // Store the reel information in DynamoDB
         const dbParams = {
             TableName: TABLE_NAME,
             Item: {
@@ -138,8 +244,7 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
                 caption,
                 likes: 0,
                 likedBy: [],
-                timestamp: Date.now(),
-                jobId: job.Job.Id
+                timestamp: Date.now()
             }
         };
 
@@ -147,7 +252,8 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
 
         const reelData = {
             message: 'Reel featured successfully',
-            media_url: `${CLOUDFRONT_URL}/reels/${stock_identifier}_${reel_id}/index.m3u8`
+            media_url: `${CLOUDFRONT_URL}/${fileName}`,
+            mediaConvertJobId: mediaConvertResponse.Job.Id
         };
 
         res.json(reelData);
@@ -155,6 +261,7 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
         res.status(500).json({ error: `Failed to feature reel: ${error.message}` });
     }
 });
+
 
 // Like a reel
 app.post('/like-reel', async (req, res) => {
