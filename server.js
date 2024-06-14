@@ -83,7 +83,7 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
                             HlsGroupSettings: {
                                 Destination: `s3://${process.env.MEDIACONVERT_OUTPUT_BUCKET}/`,
                                 SegmentLength: 10,
-                                MinSegmentLength: 0, // Add the minSegmentLength property
+                                MinSegmentLength: 0
                             }
                         },
                         Outputs: [
@@ -102,6 +102,7 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
                                 },
                                 AudioDescriptions: [
                                     {
+                                        AudioSourceName: "Audio Selector 1",
                                         CodecSettings: {
                                             Codec: "AAC",
                                             AacSettings: {
@@ -119,7 +120,14 @@ app.post('/feature-reel', upload.single('file'), async (req, res) => {
                 ],
                 Inputs: [
                     {
-                        FileInput: `s3://${S3_BUCKET}/${fileName}`
+                        FileInput: `s3://${S3_BUCKET}/${fileName}`,
+                        AudioSelectors: {
+                            "Audio Selector 1": {
+                                DefaultSelection: "DEFAULT",
+                                SelectorType: "TRACK",
+                                Tracks: [1]
+                            }
+                        }
                     }
                 ]
             }
